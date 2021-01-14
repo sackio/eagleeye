@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+
+import argparse
+import numpy as np
+import sys
+import os
+import cv2
+import face_recognition
+
+parser = argparse.ArgumentParser(description='Scan video file, frame by frame, recognize faces and export them to image files in an output directory', epilog='When a face is recognized, it is compared to other recognized faces. Each unique person is assigned an id. Face images are exported as PNG files named as output/<id of person>_<ms timestamp of video>.png (i.e. "output/31_5333.png")')
+parser.add_argument('--video', help='path to video file (uses OpenCV and supports most video formats)', required=True)
+parser.add_argument('--output', help='path to directory for exporting face images (creates directory if not present)', required=True)
+parser.add_argument('--interval', help='milliseconds to skip between processing frames (i.e. 1000 will process one frame for every 1 second of video, 0 will process all frames). DEFAULT: 1000', default=1000, type=int)
+parser.add_argument('--margin', help='adds margin around face images equal to percent of width and length (DEFAULT: 0.40, i.e. for a 100px by 100px face, a 140px by 140px image will be extracted)', default=0.4, type=float)
+parser.add_argument('--model', help='which face detection model to use. "hog" is less accurate but faster on CPUs. “cnn” is a more accurate deep-learning model which is GPU/CUDA accelerated (if available). The default is "hog"', default='hog', choices=['cnn', 'hog'])
+parser.add_argument('--tolerance', help='how much distance between faces to consider it a match (lower numbers require greater similarity, DEFAULT: 0.9)', default=0.9, type=float)
+parser.add_argument('--upsample', help='How many times to upsample the image looking for faces. Higher numbers find smaller faces. (DEFAULT: 1)', default=1, type=int)
+parser.add_argument('--maxfaces', help='maximum images number of the same face to export. (DEFAULT: 10, higher numbers will export more images of the same person as it scans more frames)', default=10, type=int)
+parser.add_argument('--preview', help='show video preview while processing, DEFAULT: false', action='store_true')
+
+args = parser.parse_args()
+
+video_capture = cv2.VideoCapture(args.video)
+if not os.path.isdir(args.output):
+  os.makedirs(args.output)
+
+total_frame_count = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
+fps = video_capture.get(cv2.CAP_PROP_FPS)
+frame_modulus = round(fps * (args.interval / 1000)) if args.interval else 1
+
+known_face_encodings = []
+face_counts = {}
+frame_count = 1
+
+while frame_count < total_frame_count:
+  ret, frame = video_capture.read()
+  rgb_frame = frame[:, :, ::-1]
+
+  if frame_count % frame_modulus == 0:
+    face_locations = face_recognition.face_locations(rgb_frame, number_of_times_to_upsample=args.upsample, model=args.model)
+    face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+    face_names = []
+
+    for face_encoding in face_encodings:
+      matches = face_recognition.compare_faces(known_face_encodings, face_encoding, tolerance=args.tolerance)
+      face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+
+      if len(face_distances):
+        best_match_index = np.argmin(face_distances)
+
+      if len(face_distances) and matches[best_match_index]:
+        name = str(best_match_index)
+      else:
+        known_face_encodings.append(face_encoding)
+        name = str(len(known_face_encodings))
+
+      face_names.append(name)
+
+    for (top, right, bottom, left), name in zip(face_locations, face_names):
+      maxed_face = True if face_counts.get(name) and face_counts[name] > args.maxfaces else False
+      face_counts[name] = (face_counts.get(name) or 0) + 1
+
+      if maxed_face and not args.preview:
+        continue
+
+      width = right - left
+      length = bottom - top
+      alength = round(length * args.margin / 2)
+      awidth = round(width * args.margin / 2)
+      aleft = left - awidth
+      atop = top - alength
+      aright = right + awidth
+      abottom = bottom + alength
+
+      if not maxed_face:
+        ts = round(frame_count / fps * 1000)
+        image_path = os.path.join(args.output, '{}_{}.png'.format(name, ts))
+        try:
+          cv2.imwrite(image_path, frame[atop:abottom, aleft:aright])
+          #print('Writing face image: individual {} | {} ms'.format(name, ts))
+        except Exception as e:
+          print(str(e))
+
+      if args.preview:
+        cv2.rectangle(frame, (aleft, atop), (aright, abottom), (0, 0, 255), 1)
+        cv2.rectangle(frame, (aleft, abottom - 15), (aright, abottom), (0, 0, 255), cv2.FILLED)
+        font = cv2.FONT_HERSHEY_DUPLEX
+        cv2.putText(frame, name, (aleft + 6, abottom - 6), font, 0.33, (255, 255, 255), 1)
+
+  if args.preview:
+    cv2.imshow('Video', frame)
+
+  os.system('clear')
+  sys.stdout.write('[ {video} -> {pct}% processed | {faces} faces found ]'.format(video=args.video, pct=round(frame_count / total_frame_count * 100, 1), faces=len(known_face_encodings)))
+  sys.stdout.flush()
+
+  frame_count = frame_count + 1
+
+  if cv2.waitKey(1) & 0xFF == ord('q'):
+    break
+
+video_capture.release()
+cv2.destroyAllWindows()

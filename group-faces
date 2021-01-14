@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+
+import face_recognition
+import cv2
+import numpy as np
+import sys
+import os
+import argparse
+import pathlib
+
+parser = argparse.ArgumentParser(description='compare face images in directory, group by similarity (i.e. same person), and output CSV file of groupings', epilog='All image files in directory are scanned for faces. When a face is recognized, it is compared to other recognized faces. Each unique face is assigned an id. A CSV file is written with "<image path>,<face id>" for each image file.')
+parser.add_argument('--directory', help='path to directory face images (directory will be scanned recursively, so sub-folders are fine)', required=True)
+parser.add_argument('--output', help='path to write CSV file to', required=True)
+parser.add_argument('--model', help='which face detection model to use. "hog" is less accurate but faster on CPUs. “cnn” is a more accurate deep-learning model which is GPU/CUDA accelerated (if available). The default is "hog"', default='hog', choices=['cnn', 'hog'])
+parser.add_argument('--tolerance', help='how much distance between faces to consider it a match (lower numbers require greater similarity, DEFAULT: 0.9)', default=0.9, type=float)
+
+args = parser.parse_args()
+
+known_face_encodings = []
+
+output = open(args.output, 'w')
+output.write('path,face\n')
+
+known_face_encodings = [
+]
+
+ext_filter = re.compile('\.(png)$', re.IGNORECASE)
+images = []
+
+for root, dirs, files in os.walk(args.directory):
+  for file in files:
+    if ext_filter.search(file):
+      images.append(os.path.join(root, file))
+
+for i in range(len(images)):
+  file = images[i]
+
+  try:
+    image = face_recognition.load_image_file(file)
+  except:
+    continue
+
+  face_locations = face_recognition.face_locations(image, model=args.model)
+  face_encodings = face_recognition.face_encodings(image, face_locations)
+
+  if not len(face_encodings):
+    continue
+
+  face_encoding = face_encodings[0]
+  face_location = face_locations[0]
+
+  match = face_recognition.compare_faces(known_face_encodings, face_encoding, tolerance=args.tolerance)
+  face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+
+  if len(face_distances):
+    best_match_index = np.argmin(face_distances)
+
+  if len(face_distances) and matches[best_match_index]:
+    face = str(best_match_index)
+  else:
+    known_face_encodings.append(face_encoding)
+    face = str(len(known_face_encodings))
+
+  output.write('"{file}","{face}"\n'.format(file=file, face=face))
+
+  os.system('clear')
+  sys.stdout.write('[{pct}% processed | {faces} faces found ]'.format(pct=round((i + 1) / len(images) * 100, 1), faces=len(known_face_encodings)))
+  sys.stdout.flush()
+
+output.close()

@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+
+import argparse
+import sys
+import os
+import re
+import hashlib
+import tempfile
+import pathlib
+
+parser = argparse.ArgumentParser(description='recursively scan directory, processing video files, recognizing faces and exporting them to image files in an output directory', epilog='For each video file, a subdirectory is created in the output path, named the checksum of the video path (i.e. directory/test.mp4 -> output/17f53613b2b25b29d192d5b11bc77459). For each video file, when a face is recognized, it is compared to other recognized faces. Each unique person is assigned an id. Face images are exported as PNG files named as output/<checksum of video path>/<id of person>_<ms timestamp of video>.png (i.e. "output/17f53613b2b25b29d192d5b11bc77459/31_5333.png")')
+parser.add_argument('--directory', help='path to directory containing videos (directory will be scanned recursively, so sub-folders are fine)', required=True)
+parser.add_argument('--output', help='path to write face images to (creates directory if not present)', required=True)
+parser.add_argument('--processes', help='number of videos to process in parallel, DEFAULT: 1', type=int, default=1)
+parser.add_argument('--interval', help='milliseconds to skip between processing frames (i.e. 1000 will process one frame for every 1 second of video, 0 will process all frames). DEFAULT: 1000', default=1000, type=int)
+parser.add_argument('--margin', help='adds margin around face images equal to percent of width and length (DEFAULT: 0.40, i.e. for a 100px by 100px face, a 140px by 140px image will be extracted)', default=0.4, type=float)
+parser.add_argument('--model', help='which face detection model to use. "hog" is less accurate but faster on CPUs. “cnn” is a more accurate deep-learning model which is GPU/CUDA accelerated (if available). The default is "hog"', default='hog', choices=['cnn', 'hog'])
+parser.add_argument('--tolerance', help='how much distance between faces to consider it a match (lower numbers require greater similarity, DEFAULT: 0.9)', default=0.9, type=float)
+parser.add_argument('--upsample', help='How many times to upsample the image looking for faces. Higher numbers find smaller faces. (DEFAULT: 1)', default=1, type=int)
+parser.add_argument('--maxfaces', help='maximum images number of the same face to export. (DEFAULT: 10, higher numbers will export more images of the same person as it scans more frames)', default=10, type=int)
+parser.add_argument('--preview', help='show video preview while processing, DEFAULT: false', action='store_true')
+
+args = parser.parse_args()
+
+ext_filter = re.compile('\.(mp4|webm|avi|ogg|mov|3gp|wmv|mpg|mpeg|mkv)$', re.IGNORECASE)
+videos = []
+
+for root, dirs, files in os.walk(args.directory):
+  for file in files:
+    if ext_filter.search(file):
+      videos.append(os.path.join(root, file))
+
+output_paths = []
+
+for video in videos:
+  output_paths.append(os.path.join(args.output, hashlib.md5(video.encode('utf-8')).hexdigest()))
+
+tf = tempfile.NamedTemporaryFile(delete=True)
+file = open(tf.name, 'w')
+
+for i in range(len(videos)):
+  cmd = '--video "{video}" --output "{output}" --interval {interval} --margin {margin} --model {model} --tolerance {tolerance} --upsample {upsample} --maxfaces {maxfaces}'.format(
+    video=videos[i], output=output_paths[i], interval=args.interval, margin=args.margin, model=args.model
+  , tolerance=args.tolerance, upsample=args.upsample, maxfaces=args.maxfaces)
+  if args.preview:
+    cmd += ' --preview'
+
+  file.write(cmd + '\n')
+
+file.close()
+
+scmd = 'xargs -a {file} -I {{}} -n1 -P{processes} sh -c "{script} {{}}"'.format(
+         file=tf.name, processes=args.processes
+       , script=os.path.join(str(pathlib.Path(__file__).parent.absolute()), 'extract-faces-from-video')
+       )
+
+os.system(scmd)
