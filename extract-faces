@@ -33,23 +33,23 @@ for root, dirs, files in os.walk(args.directory):
 output_paths = []
 
 for video in videos:
-  output_paths.append(os.path.join(args.output, hashlib.md5(video.encode('utf-8')).hexdigest()))
+  output_paths.append(os.path.join(args.output, hashlib.md5(video.encode('utf-8', 'replace')).hexdigest()))
 
 tf = tempfile.NamedTemporaryFile(delete=True)
 file = open(tf.name, 'w')
 
 for i in range(len(videos)):
-  cmd = '--video "{video}" --output "{output}" --interval {interval} --margin {margin} --model {model} --tolerance {tolerance} --upsample {upsample} --maxfaces {maxfaces}'.format(
+  cmd = '--video \\"{video}\\" --output \\"{output}\\" --interval {interval} --margin {margin} --model {model} --tolerance {tolerance} --upsample {upsample} --maxfaces {maxfaces}'.format(
     video=videos[i], output=output_paths[i], interval=args.interval, margin=args.margin, model=args.model
   , tolerance=args.tolerance, upsample=args.upsample, maxfaces=args.maxfaces)
   if args.preview:
     cmd += ' --preview'
 
-  file.write(cmd + '\n')
+  file.write(cmd.encode('utf-8', 'replace').decode('utf-8') + '\n')
 
 file.close()
 
-scmd = 'xargs -a {file} -I {{}} -n1 -P{processes} sh -c "{script} {{}}"'.format(
+scmd = 'xargs -a {file} -I {{}} -n1 -P{processes} sh -c "{script} {{}} || true"'.format(
          file=tf.name, processes=args.processes
        , script=os.path.join(str(pathlib.Path(__file__).parent.absolute()), 'extract-faces-from-video')
        )

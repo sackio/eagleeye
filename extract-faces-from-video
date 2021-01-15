@@ -72,6 +72,9 @@ while frame_count < total_frame_count:
       aright = right + awidth
       abottom = bottom + alength
 
+      if np.amax([length, width]) / np.amin([length, width]) >= 2:
+        continue
+
       if not maxed_face:
         ts = round(frame_count / fps * 1000)
         image_path = os.path.join(args.output, '{}_{}.png'.format(name, ts))
