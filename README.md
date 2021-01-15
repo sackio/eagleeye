@@ -39,7 +39,7 @@ It’s made up of a few scripts. Here’s more detailed usage details:
 
 #### extract-faces
 
-```bash
+```
 usage: extract-faces [-h] --directory DIRECTORY --output OUTPUT
                      [--processes PROCESSES] [--interval INTERVAL]
                      [--margin MARGIN] [--model {cnn,hog}]
@@ -90,7 +90,7 @@ output/<checksum of video path>/<id of person>_<ms timestamp of video>.png
 
 #### group-faces
 
-```bash
+```
 usage: group-faces [-h] --directory DIRECTORY --output OUTPUT
                    [--model {cnn,hog}] [--tolerance TOLERANCE]
 
@@ -117,9 +117,9 @@ it is compared to other recognized faces. Each unique face is assigned an id.
 A CSV file is written with "<image path>,<face id>" for each image file.
 ```
 
-extract-faces-from-video
+#### extract-faces-from-video
 
-```bash
+```
 usage: extract-faces-from-video [-h] --video VIDEO --output OUTPUT
                                 [--interval INTERVAL] [--margin MARGIN]
                                 [--model {cnn,hog}] [--tolerance TOLERANCE]
