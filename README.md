@@ -33,6 +33,13 @@ Group extracted images by face:
 
 The /faces directory now contains images of all images recognized from the videos, and faces.csv is a listing of each face image file and the unique face pictured.
 
+### OS/X
+
+On OS/X, you will need to install GNU xargs, as the version of xargs built into OS/X is lacking some needed command-line options.  The recommended way to do this is via the Homebrew package `findutils`:
+```
+brew install findutils
+```
+
 ## Advanced usage
 
 It’s made up of a few scripts. Here’s more detailed usage details:

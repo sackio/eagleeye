@@ -49,7 +49,16 @@ for i in range(len(videos)):
 
 file.close()
 
-scmd = 'xargs -a {file} -I {{}} -n1 -P{processes} sh -c "{script} {{}} || true"'.format(
+xargs = 'xargs'
+
+import platform
+if platform.system() == 'Darwin':
+  # On OSX, use gxargs instead of the default OSX xargs (which doesn't support the same parameters).
+  # Make sure to install gxargs via Homebrew:
+  #   brew install findutils
+  xargs = 'gxargs'
+
+scmd = xargs + ' -a {file} -I {{}} -n1 -P{processes} sh -c "{script} {{}} || true"'.format(
          file=tf.name, processes=args.processes
        , script=os.path.join(str(pathlib.Path(__file__).parent.absolute()), 'extract-faces-from-video')
        )
