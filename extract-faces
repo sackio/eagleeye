@@ -107,15 +107,12 @@ let ext_filter = /\.(mp4|webm|avi|ogg|mov|3gp|wmv|mpg|mpeg|mkv)$/i;
 let videos = [];
 let outputs = _.times(OPTS.processes, _.constant(false));
 let count = 0;
+let completed_count = 0;
 
 let queue = Async.queue(function(task, cb){
   let video_count = ++count;
   let index = _.findIndex(outputs, o => o === false);
   outputs[index] = true;
-
-  process.stdout.cursorTo(0, 1);
-  process.stdout.clearLine();
-  process.stdout.write(`PROCESSED ${video_count} OF ${videos.length} | ${(video_count / videos.length * 100).toFixed(1)}%`);
 
   let args = [];
   _.each(task, (v, k) => {
@@ -123,13 +120,27 @@ let queue = Async.queue(function(task, cb){
     args.push(v);
   });
 
-  let ocb = _.once(function(){
+  let ocb = _.once(function(code, signal){
+    if (code !== 0){
+      //process.exit();
+    }
+
     outputs[index] = false;
     try {
       cp.kill();
     } catch (e) {
 
     }
+
+    completed_count++;
+
+    process.stdout.cursorTo(0, index + 2);
+    process.stdout.clearLine();
+
+    process.stdout.cursorTo(0, outputs.length + 3);
+    process.stdout.clearLine();
+    process.stdout.write(`PROCESSED ${completed_count} OF ${videos.length} | ${(completed_count / videos.length * 100).toFixed(1)}%`);
+
     cb();
   });
 
@@ -139,10 +150,32 @@ let queue = Async.queue(function(task, cb){
     data.toString().split(/\n/).forEach(d => {
       if (!d) return;
 
+      let cols = process.stdout.getWindowSize()[0];
+
       process.stdout.cursorTo(5, index + 2);
       process.stdout.clearLine();
-      process.stdout.write(`[VIDEO ${video_count}] ${task.video} => ${d}`);
+      process.stdout.write(`[VIDEO ${video_count}] ${task.video} => ${d}`.substring(0, cols - 6));
     });
+  });
+
+  cp.stderr.on('data', data => {
+    data.toString().split(/\n/).forEach(d => {
+      if (!d) return;
+
+      let cols = process.stdout.getWindowSize()[0];
+
+      process.stdout.cursorTo(5, index + 2);
+      process.stdout.clearLine();
+      process.stdout.write(`[VIDEO ${video_count}] ${task.video} => ERROR: ${d}`.substring(0, cols - 6));
+    });
+  });
+
+  cp.on('error', err => {
+    let cols = process.stdout.getWindowSize()[0];
+
+    process.stdout.cursorTo(5, index + 2);
+    process.stdout.clearLine();
+    process.stdout.write(`[VIDEO ${video_count}] ${task.video} => ERROR: ${err.message}`.substring(0, cols - 6));
   });
 
   cp.on('exit', ocb);

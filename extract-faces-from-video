@@ -33,8 +33,14 @@ face_counts = {}
 frame_count = 1
 
 while frame_count < total_frame_count:
-  ret, frame = video_capture.read()
-  rgb_frame = frame[:, :, ::-1]
+  try:
+    ret, frame = video_capture.read()
+    rgb_frame = frame[:, :, ::-1]
+  except Exception as e:
+    sys.stderr.write(str(e) + '\n')
+    sys.stderr.flush()
+    frame_count = frame_count + 1
+    continue
 
   if frame_count % frame_modulus == 0:
     face_locations = face_recognition.face_locations(rgb_frame, number_of_times_to_upsample=args.upsample, model=args.model)
@@ -80,10 +86,9 @@ while frame_count < total_frame_count:
         image_path = os.path.join(args.output, '{}_{}.png'.format(name, ts))
         try:
           cv2.imwrite(image_path, frame[atop:abottom, aleft:aright])
-          #print('Writing face image: individual {} | {} ms'.format(name, ts))
         except Exception as e:
-          error = True
-          #print(str(e))
+          sys.stderr.write(str(e) + '\n')
+          sys.stderr.flush()
 
       if args.preview:
         cv2.rectangle(frame, (aleft, atop), (aright, abottom), (0, 0, 255), 1)
