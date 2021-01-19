@@ -8,6 +8,7 @@ Install dependencies:
 
 ```bash
 pip install -r requirements
+npm install
 ```
 
 Put all your video files in a directory (i.e. /videos -- it can include subfolders, etc.). Create another directory for saving face images (i.e. /faces) to.
