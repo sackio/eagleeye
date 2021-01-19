@@ -126,3 +126,5 @@ dmypy.json
 
 local/
 local
+
+node_modules

@@ -1,57 +1,170 @@
-#!/usr/bin/env python3
+#!/usr/bin/env node
 
-import argparse
-import sys
-import os
-import re
-import hashlib
-import tempfile
-import pathlib
+const  _ = require('lodash')
+    , Async = require('async')
+    , CP = require('child_process')
+    , FS = require('fs')
+    , Path = require('path')
+    , Crypto = require('crypto')
+    , Optionator = require('optionator')({
+        prepend: 'recursively scan directory, processing video files, recognizing faces and exporting them to image files in an output directory'
+      , append: 'For each video file, a subdirectory is created in the output path, named the checksum of the video path (i.e. directory/test.mp4 -> output/17f53613b2b25b29d192d5b11bc77459). For each video file, when a face is recognized, it is compared to other recognized faces. Each unique person is assigned an id. Face images are exported as PNG files named as output/<checksum of video path>/<id of person>_<ms timestamp of video>.png (i.e. "output/17f53613b2b25b29d192d5b11bc77459/31_5333.png")'
+      , options: [
+          {
+            option: 'help'
+          , alias: 'h'
+          , type: 'Boolean'
+          , description: 'displays help'
+          }
+        , {
+            option: 'directory'
+          , type: 'String'
+          , description: 'path to directory containing videos (directory will be scanned recursively, so sub-folders are fine)'
+          , required: true
+          }
+        , {
+            option: 'output'
+          , type: 'String'
+          , description: 'path to write face images to (creates directory if not present)'
+          , required: true
+          }
+        , {
+            option: 'processes'
+          , type: 'Int'
+          , description: 'number of videos to process in parallel, DEFAULT: 1'
+          , default: '1'
+          }
+        , {
+            option: 'interval'
+          , type: 'Int'
+          , description: 'milliseconds to skip between processing frames (i.e. 1000 will process one frame for every 1 second of video, 0 will process all frames). DEFAULT: 1000'
+          , default: '1000'
+          }
+        , {
+            option: 'margin'
+          , type: 'Number'
+          , description: 'adds margin around face images equal to percent of width and length (DEFAULT: 0.40, i.e. for a 100px by 100px face, a 140px by 140px image will be extracted)'
+          , default: '0.4'
+          }
+        , {
+            option: 'model'
+          , type: 'String'
+          , description: 'which face detection model to use. "hog" is less accurate but faster on CPUs. “cnn” is a more accurate deep-learning model which is GPU/CUDA accelerated (if available). The default is "hog"'
+          , default: 'hog'
+          , enum: ['hog', 'cnn']
+          }
+        , {
+            option: 'tolerance'
+          , type: 'Number'
+          , description: 'how much distance between faces to consider it a match (lower numbers require greater similarity, DEFAULT: 0.9)'
+          , default: '0.9'
+          }
+        , {
+            option: 'upsample'
+          , type: 'Number'
+          , description: 'how many times to upsample the image looking for faces. Higher numbers find smaller faces. (DEFAULT: 1)'
+          , default: '1'
+          }
+        , {
+            option: 'maxfaces'
+          , type: 'Int'
+          , description: 'maximum images number of the same face to export. (DEFAULT: 10, higher numbers will export more images of the same person as it scans more frames)'
+          , default: '10'
+          }
+        , {
+            option: 'preview'
+          , type: 'Boolean'
+          , description: 'show video preview while processing, DEFAULT: false'
+          }
+        ]
+      })
+;
 
-parser = argparse.ArgumentParser(description='recursively scan directory, processing video files, recognizing faces and exporting them to image files in an output directory', epilog='For each video file, a subdirectory is created in the output path, named the checksum of the video path (i.e. directory/test.mp4 -> output/17f53613b2b25b29d192d5b11bc77459). For each video file, when a face is recognized, it is compared to other recognized faces. Each unique person is assigned an id. Face images are exported as PNG files named as output/<checksum of video path>/<id of person>_<ms timestamp of video>.png (i.e. "output/17f53613b2b25b29d192d5b11bc77459/31_5333.png")')
-parser.add_argument('--directory', help='path to directory containing videos (directory will be scanned recursively, so sub-folders are fine)', required=True)
-parser.add_argument('--output', help='path to write face images to (creates directory if not present)', required=True)
-parser.add_argument('--processes', help='number of videos to process in parallel, DEFAULT: 1', type=int, default=1)
-parser.add_argument('--interval', help='milliseconds to skip between processing frames (i.e. 1000 will process one frame for every 1 second of video, 0 will process all frames). DEFAULT: 1000', default=1000, type=int)
-parser.add_argument('--margin', help='adds margin around face images equal to percent of width and length (DEFAULT: 0.40, i.e. for a 100px by 100px face, a 140px by 140px image will be extracted)', default=0.4, type=float)
-parser.add_argument('--model', help='which face detection model to use. "hog" is less accurate but faster on CPUs. “cnn” is a more accurate deep-learning model which is GPU/CUDA accelerated (if available). The default is "hog"', default='hog', choices=['cnn', 'hog'])
-parser.add_argument('--tolerance', help='how much distance between faces to consider it a match (lower numbers require greater similarity, DEFAULT: 0.9)', default=0.9, type=float)
-parser.add_argument('--upsample', help='How many times to upsample the image looking for faces. Higher numbers find smaller faces. (DEFAULT: 1)', default=1, type=int)
-parser.add_argument('--maxfaces', help='maximum images number of the same face to export. (DEFAULT: 10, higher numbers will export more images of the same person as it scans more frames)', default=10, type=int)
-parser.add_argument('--preview', help='show video preview while processing, DEFAULT: false', action='store_true')
+let OPTS
+  , SCRIPT = Path.join(__dirname, 'extract-faces-from-video');
 
-args = parser.parse_args()
+try {
+  OPTS = Optionator.parseArgv(process.argv);
+} catch (err) {
+  console.log(Optionator.generateHelp());
+  process.exit();
+}
 
-ext_filter = re.compile('\.(mp4|webm|avi|ogg|mov|3gp|wmv|mpg|mpeg|mkv)$', re.IGNORECASE)
-videos = []
+if (OPTS.help) {
+  console.log(Optionator.generateHelp());
+  process.exit();
+}
 
-for root, dirs, files in os.walk(args.directory):
-  for file in files:
-    if ext_filter.search(file):
-      videos.append(os.path.join(root, file))
+async function* walk(dir) {
+  for await (const d of await FS.promises.opendir(dir)) {
+    const entry = Path.join(dir, d.name);
+    if (d.isDirectory()) yield* walk(entry);
+    else if (d.isFile()) yield entry;
+  }
+}
 
-output_paths = []
+let ext_filter = /\.(mp4|webm|avi|ogg|mov|3gp|wmv|mpg|mpeg|mkv)$/i;
+let videos = [];
+let outputs = _.times(OPTS.processes, _.constant(false));
+let count = 0;
 
-for video in videos:
-  output_paths.append(os.path.join(args.output, hashlib.md5(video.encode('utf-8', 'replace')).hexdigest()))
+let queue = Async.queue(function(task, cb){
+  let video_count = ++count;
+  let index = _.findIndex(outputs, o => o === false);
+  outputs[index] = true;
 
-tf = tempfile.NamedTemporaryFile(delete=True)
-file = open(tf.name, 'w')
+  process.stdout.cursorTo(0, 1);
+  process.stdout.clearLine();
+  process.stdout.write(`PROCESSED ${video_count} OF ${videos.length} | ${(video_count / videos.length * 100).toFixed(1)}%`);
 
-for i in range(len(videos)):
-  cmd = '--video \\"{video}\\" --output \\"{output}\\" --interval {interval} --margin {margin} --model {model} --tolerance {tolerance} --upsample {upsample} --maxfaces {maxfaces}'.format(
-    video=videos[i], output=output_paths[i], interval=args.interval, margin=args.margin, model=args.model
-  , tolerance=args.tolerance, upsample=args.upsample, maxfaces=args.maxfaces)
-  if args.preview:
-    cmd += ' --preview'
+  let args = [];
+  _.each(task, (v, k) => {
+    args.push(`--${k}`);
+    args.push(v);
+  });
 
-  file.write(cmd.encode('utf-8', 'replace').decode('utf-8') + '\n')
+  let ocb = _.once(function(){
+    outputs[index] = false;
+    try {
+      cp.kill();
+    } catch (e) {
 
-file.close()
+    }
+    cb();
+  });
 
-scmd = 'xargs -a {file} -I {{}} -n1 -P{processes} sh -c "{script} {{}} || true"'.format(
-         file=tf.name, processes=args.processes
-       , script=os.path.join(str(pathlib.Path(__file__).parent.absolute()), 'extract-faces-from-video')
-       )
+  let cp = CP.spawn(SCRIPT, args);
 
-os.system(scmd)
+  cp.stdout.on('data', data => {
+    data.toString().split(/\n/).forEach(d => {
+      if (!d) return;
+
+      process.stdout.cursorTo(5, index + 2);
+      process.stdout.clearLine();
+      process.stdout.write(`[VIDEO ${video_count}] ${task.video} => ${d}`);
+    });
+  });
+
+  cp.on('exit', ocb);
+}, OPTS.processes);
+
+(async function(){
+  for await (const p of walk(OPTS.directory))
+    if (p.match(ext_filter)) videos.push(p);
+
+  videos.forEach(v => {
+    let hash = Crypto.createHash('md5');
+    hash.update(v);
+
+    queue.push({
+      video: v
+    , output: Path.join(OPTS.output, hash.digest('hex'))
+    , interval: OPTS.interval
+    , margin: OPTS.margin
+    , model: OPTS.model
+    , tolerance: OPTS.tolerance
+    , upsample: OPTS.upsample
+    , maxfaces: OPTS.maxfaces
+    });
+  });
+})()

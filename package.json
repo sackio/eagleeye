@@ -1,0 +1,11 @@
+{
+  "name": "eagleeye",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {},
+  "dependencies": {
+    "lodash": "~4.17.14",
+    "async": "~3.0.1",
+    "optionator": "~0.8.3"
+  }
+}

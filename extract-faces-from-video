@@ -82,7 +82,8 @@ while frame_count < total_frame_count:
           cv2.imwrite(image_path, frame[atop:abottom, aleft:aright])
           #print('Writing face image: individual {} | {} ms'.format(name, ts))
         except Exception as e:
-          print(str(e))
+          error = True
+          #print(str(e))
 
       if args.preview:
         cv2.rectangle(frame, (aleft, atop), (aright, abottom), (0, 0, 255), 1)
@@ -93,8 +94,7 @@ while frame_count < total_frame_count:
   if args.preview:
     cv2.imshow('Video', frame)
 
-  os.system('clear')
-  sys.stdout.write('[ {video} -> {pct}% processed | {faces} faces found ]'.format(video=args.video, pct=round(frame_count / total_frame_count * 100, 1), faces=len(known_face_encodings)))
+  sys.stdout.write('{pct}% processed | {faces} faces found\n'.format(pct=round(frame_count / total_frame_count * 100, 1), faces=len(known_face_encodings)))
   sys.stdout.flush()
 
   frame_count = frame_count + 1
