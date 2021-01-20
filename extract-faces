@@ -100,6 +100,8 @@ if (OPTS.help) {
   process.exit();
 }
 
+if (OPTS.skipexisting) OPTS.skipexisting = null;
+
 async function* walk(dir) {
   for await (const d of await FS.promises.opendir(dir)) {
     const entry = Path.join(dir, d.name);
@@ -122,7 +124,7 @@ let queue = Async.queue(function(task, cb){
   let args = [];
   _.each(task, (v, k) => {
     args.push(`--${k}`);
-    args.push(v);
+    if (!_.isNil(v)) args.push(v);
   });
 
   let ocb = _.once(function(code, signal){
@@ -200,6 +202,8 @@ let queue = Async.queue(function(task, cb){
     }, _.omit(OPTS, [
       'directory'
     , 'output'
+    , '_'
+    , 'processes'
     ])));
   });
 })()
