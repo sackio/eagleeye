@@ -76,6 +76,11 @@ const  _ = require('lodash')
           , type: 'Boolean'
           , description: 'show video preview while processing, DEFAULT: false'
           }
+        , {
+            option: 'skipexisting'
+          , type: 'Boolean'
+          , description: 'if output directory exists for video, skip processing video, DEFAULT: false'
+          }
         ]
       })
 ;
@@ -103,7 +108,7 @@ async function* walk(dir) {
   }
 }
 
-let ext_filter = /\.(mp4|webm|avi|ogg|mov|3gp|wmv|mpg|mpeg|mkv)$/i;
+let ext_filter = /\.(mp4|webm|avi|ogg|mov|3gp|wmv|mpg|mpeg|mkv|ts)$/i;
 let videos = [];
 let outputs = _.times(OPTS.processes, _.constant(false));
 let count = 0;
@@ -189,15 +194,12 @@ let queue = Async.queue(function(task, cb){
     let hash = Crypto.createHash('md5');
     hash.update(v);
 
-    queue.push({
+    queue.push(_.extend({
       video: v
     , output: Path.join(OPTS.output, hash.digest('hex'))
-    , interval: OPTS.interval
-    , margin: OPTS.margin
-    , model: OPTS.model
-    , tolerance: OPTS.tolerance
-    , upsample: OPTS.upsample
-    , maxfaces: OPTS.maxfaces
-    });
+    }, _.omit(OPTS, [
+      'directory'
+    , 'output'
+    ])));
   });
 })()

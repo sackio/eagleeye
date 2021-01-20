@@ -17,8 +17,12 @@ parser.add_argument('--tolerance', help='how much distance between faces to cons
 parser.add_argument('--upsample', help='How many times to upsample the image looking for faces. Higher numbers find smaller faces. (DEFAULT: 1)', default=1, type=int)
 parser.add_argument('--maxfaces', help='maximum images number of the same face to export. (DEFAULT: 10, higher numbers will export more images of the same person as it scans more frames)', default=10, type=int)
 parser.add_argument('--preview', help='show video preview while processing, DEFAULT: false', action='store_true')
+parser.add_argument('--skipexisting', help='if output directory exists, skip processing video, DEFAULT: false', action='store_true')
 
 args = parser.parse_args()
+
+if args.skipexisting and os.path.isdir(args.output):
+  sys.exit();
 
 video_capture = cv2.VideoCapture(args.video)
 if not os.path.isdir(args.output):
